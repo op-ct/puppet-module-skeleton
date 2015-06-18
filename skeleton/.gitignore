@@ -1,4 +1,5 @@
 .*.sw?
+dist
 /pkg
 /spec/fixtures
 /.rspec_system

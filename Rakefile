@@ -65,7 +65,7 @@ namespace :test do
   desc 'run `bundle exec rake test` inside the generated module' +
        "\n\n\tEnvironment variables:\n" +
        "\t----------------------\n" +
-       "\tSIMP_beaker_suites = yes   # include beaker suites [default: no]"
+       "\tSIMP_beaker_suites=yes   # include beaker suites [default: no]"
   task :test do
     ensure_tmp
     Dir.chdir TMP_DIR

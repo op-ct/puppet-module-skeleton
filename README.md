@@ -55,7 +55,7 @@ development:
 
 Of particular interest should be:
 
-* `rake beaker:suites` - run all beaker suite tests
+* `rake beaker:suites` - run all beaker [acceptance test suites](https://github.com/simp/rubygem-simp-beaker-helpers#suites)
 * `rake test`          - run syntax, lint, and unit tests, and validate metadata
 * `rake spec`          - run unit tests
 * `rake lint`          - checks against the puppet style guide

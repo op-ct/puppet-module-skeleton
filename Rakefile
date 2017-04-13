@@ -78,14 +78,11 @@ namespace :test do
     puts "==== Entering #{mod_dir}"
     Dir.chdir mod_dir
 
-    ENV['TRUSTED_NODE_DATA'] = ENV['TRUSTED_NODE_DATA'] || 'yes'
     # propagate relavent environment variables
     env_globals = []
     [
       'PUPPET_VERSION',
       'STRICT_VARIABLES',
-      'FUTURE_PARSER',
-      'TRUSTED_NODE_DATA',
       'TRAVIS',
       'CI',
     ].each do |v|

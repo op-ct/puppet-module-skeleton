@@ -24,45 +24,9 @@ default_hiera_config =<<-EOM
 EOM
 
 
-# This can be used from inside your spec tests to load custom hieradata within
-# any context.
-#
-# Example:
-#
-# describe 'some::class' do
-#   context 'with version 10' do
-#     let(:hieradata){ "#{class_name}_v10" }
-#     ...
-#   end
-# end
-#
-# Then, create a YAML file at spec/fixtures/hieradata/some__class_v10.yaml.
-#
-# Hiera will use this file as it's base of information stacked on top of
-# 'default.yaml' and <module_name>.yaml per the defaults above.
-#
-# Note: Any colons (:) are replaced with underscores (_) in the class name.
-# ------------------------------------------------------------------------------
-#
-# NOTE: This use of `:hieradata` is deprecated―please don't use it unless you
-#       need to maintain compatibility with legacy tests
-#
-# rspec-puppet now provides several native ways to configure Hiera data:
-#
-#   - https://github.com/rodjek/rspec-puppet#hiera-integration
-#   - https://github.com/rodjek/rspec-puppet#enabling-hiera-lookups
-#
-# ------------------------------------------------------------------------------
-def set_hieradata(hieradata)
-    RSpec.configure { |c| c.default_facts['custom_hiera'] = hieradata }
-end
-
-if not File.directory?(File.join(fixture_path,'hieradata')) then
-  FileUtils.mkdir_p(File.join(fixture_path,'hieradata'))
-end
-
-if not File.directory?(File.join(fixture_path,'modules',module_name)) then
-  FileUtils.mkdir_p(File.join(fixture_path,'modules',module_name))
+['hieradata','modules'].each do |dir|
+  _dir = File.join(fixture_path,dir)
+  FileUtils.mkdir_p(_dir) unless File.directory?(_dir)
 end
 
 RSpec.configure do |c|
@@ -83,10 +47,7 @@ RSpec.configure do |c|
   c.hiera_config = File.join(fixture_path,'hieradata','hiera.yaml')
 
   # Useless backtrace noise
-  backtrace_exclusion_patterns = [
-    /spec_helper/,
-    /gems/
-  ]
+  backtrace_exclusion_patterns = [ /spec_helper/, /gems/ ]
 
   if c.respond_to?(:backtrace_exclusion_patterns)
     c.backtrace_exclusion_patterns = backtrace_exclusion_patterns
@@ -114,18 +75,10 @@ RSpec.configure do |c|
     Puppet[:environmentpath] = @spec_global_env_temp
     Puppet[:user] = Etc.getpwuid(Process.uid).name
     Puppet[:group] = Etc.getgrgid(Process.gid).name
-
-    # sanitize hieradata
-    if defined?(hieradata)
-      set_hieradata(hieradata.gsub(':','_'))
-    elsif defined?(class_name)
-      set_hieradata(class_name.gsub(':','_'))
-    end
   end
 
   c.after(:each) do
-    # clean up the mocked environmentpath
-    FileUtils.rm_rf(@spec_global_env_temp)
+    FileUtils.rm_rf(@spec_global_env_temp) # clean up the mocked environmentpath
     @spec_global_env_temp = nil
   end
 end

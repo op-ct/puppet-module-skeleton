@@ -23,7 +23,6 @@ rvm:
 env:
   global:
     - STRICT_VARIABLES=yes
-    - TRUSTED_NODE_DATA=yes
   matrix:
     - PUPPET_VERSION="~> 4.8.1"
     - PUPPET_VERSION="~> 4.9.0"

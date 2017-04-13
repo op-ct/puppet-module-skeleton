@@ -9,19 +9,6 @@ require 'pathname'
 fixture_path = File.expand_path(File.join(__FILE__, '..', 'fixtures'))
 module_name = File.basename(File.expand_path(File.join(__FILE__,'../..')))
 
-# Add fixture lib dirs to LOAD_PATH. Work-around for PUP-3336
-if Puppet.version < "4.0.0"
-  Dir["#{fixture_path}/modules/*/lib"].entries.each do |lib_dir|
-    $LOAD_PATH << lib_dir
-  end
-end
-
-
-if !ENV.key?( 'TRUSTED_NODE_DATA' )
-  warn '== WARNING: TRUSTED_NODE_DATA is unset, using TRUSTED_NODE_DATA=yes'
-  ENV['TRUSTED_NODE_DATA']='yes'
-end
-
 default_hiera_config =<<-EOM
 ---
 :backends:
@@ -36,19 +23,6 @@ default_hiera_config =<<-EOM
   - "default"
 EOM
 
-# This can be used from inside your spec tests to set the testable environment.
-# You can use this to stub out an ENC.
-#
-# Example:
-#
-# context 'in the :foo environment' do
-#   let(:environment){:foo}
-#   ...
-# end
-#
-def set_environment(environment = :production)
-    RSpec.configure { |c| c.default_facts['environment'] = environment.to_s }
-end
 
 # This can be used from inside your spec tests to load custom hieradata within
 # any context.
@@ -68,6 +42,17 @@ end
 # 'default.yaml' and <module_name>.yaml per the defaults above.
 #
 # Note: Any colons (:) are replaced with underscores (_) in the class name.
+# ------------------------------------------------------------------------------
+#
+# NOTE: This use of `:hieradata` is deprecated―please don't use it unless you
+#       need to maintain compatibility with legacy tests
+#
+# rspec-puppet now provides several native ways to configure Hiera data:
+#
+#   - https://github.com/rodjek/rspec-puppet#hiera-integration
+#   - https://github.com/rodjek/rspec-puppet#enabling-hiera-lookups
+#
+# ------------------------------------------------------------------------------
 def set_hieradata(hieradata)
     RSpec.configure { |c| c.default_facts['custom_hiera'] = hieradata }
 end
@@ -95,7 +80,6 @@ RSpec.configure do |c|
 
   c.module_path = File.join(fixture_path, 'modules')
   c.manifest_dir = File.join(fixture_path, 'manifests')
-
   c.hiera_config = File.join(fixture_path,'hieradata','hiera.yaml')
 
   # Useless backtrace noise
@@ -123,7 +107,6 @@ RSpec.configure do |c|
     @spec_global_env_temp = Dir.mktmpdir('simpspec')
 
     if defined?(environment)
-      set_environment(environment)
       FileUtils.mkdir_p(File.join(@spec_global_env_temp,environment.to_s))
     end
 

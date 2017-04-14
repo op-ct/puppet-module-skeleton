@@ -13,7 +13,7 @@ cache: bundler
 before_script:
   - bundle update
 bundler_args: --without development system_tests
-before_install: rm Gemfile.lock || true
+before_install: rm -f Gemfile.lock || echo "Couldn't remove Gemfile"
 script:
   - bundle exec rake test
 notifications:

@@ -1,13 +1,18 @@
 # The testing matrix considers ruby/puppet versions supported by SIMP and PE:
+#
+# https://puppet.com/docs/pe/2018.1/component_versions_in_recent_pe_releases.html
+# https://puppet.com/misc/puppet-enterprise-lifecycle
+# https://puppet.com/docs/pe/2018.1/overview/getting_support_for_pe.html
 # ------------------------------------------------------------------------------
-#  release    pup   ruby      eol
-# PE 2016.4   4.7   2.1.9  2018-10
-# PE 2016.5   4.8   2.1.9  2017-10
-# SIMP6.0.0   4.8   2.1.9  TBD
-# PE 2017.1   4.9   2.1.9  2017-10
-# PE 2017.2   4.10  2.1.9  2018-02
-# PE 2018.1   5.5   2.4.4  2020-05
+# Release       Puppet   Ruby   EOL
+# SIMP 6.3      5.5      2.4    TBD
+# PE 2018.1     5.5      2.4    2020-05 (LTS)
+# PE 2019.0     6.0      2.5    2019-08-31^^^
+#
+# ^^^ = SIMP doesn't support 6 yet; tests are info-only and allowed to fail
+
 ---
+
 language: ruby
 cache: bundler
 sudo: false
@@ -24,80 +29,108 @@ addons:
 
 before_install:
   - rm -f Gemfile.lock
-  - gem update --system
+
+global:
+  - STRICT_VARIABLES=yes
+
+stages:
+  # To check if $GITHUB_OAUTH_TOKEN is able to publish a GitHub release,
+  # trigger a custom TravisCI build for this branch using the CUSTOM CONFIG:
+  #
+  #   env: VALIDATE_TRAVIS=yes
+  #
+  - name: 'validate travis'
+    if: 'env(VALIDATE_TRAVIS) = yes'
+  - name: check
+    if: 'NOT env(VALIDATE_TRAVIS) = yes'
+  - name: spec
+    if: 'NOT env(VALIDATE_TRAVIS) = yes'
+  - name: deploy
+    if: 'tag IS present AND NOT env(VALIDATE_TRAVIS) = yes'
 
 jobs:
+  allow_failures:
+    - name: 'Latest Puppet 6.x (allowed to fail)'
+
   include:
     - stage: check
-      rvm: 2.4.1
+      name: 'Syntax, style, and validation checks'
+      rvm: 2.4.5
+      env: PUPPET_VERSION="~> 5"
       script:
         - bundle exec rake check:dot_underscore
         - bundle exec rake check:test_file
-        - bundle exec rake lint
-        - bundle exec rake metadata_lint
         - bundle exec rake pkg:check_version
+        - bundle exec rake metadata_lint
         - bundle exec rake pkg:compare_latest_tag
         - bundle exec rake pkg:create_tag_changelog
+        - bundle exec rake lint
         - bundle exec puppet module build
 
     - stage: spec
-      rvm: 2.4.4
-      env: STRICT_VARIABLES=yes TRUSTED_NODE_DATA=yes PUPPET_VERSION="~> 5.5.1"
+      rvm: 2.4.5
+      name: 'Puppet 5.5 (SIMP 6.3, PE 2018.1)'
+      env: PUPPET_VERSION="~> 5.5.0"
       script:
         - bundle exec rake spec
 
     - stage: spec
-      rvm: 2.4.1
-      env: STRICT_VARIABLES=yes TRUSTED_NODE_DATA=yes PUPPET_VERSION="~> 5.0"
+      name: 'Latest Puppet 5.x'
+      rvm: 2.4.5
+      env: PUPPET_VERSION="~> 5.0"
       script:
         - bundle exec rake spec
 
     - stage: spec
-      rvm: 2.1.9
-      env: STRICT_VARIABLES=yes TRUSTED_NODE_DATA=yes PUPPET_VERSION="~> 4.10.0"
+      name: 'Latest Puppet 6.x (allowed to fail)'
+      rvm: 2.5.3
+      env: PUPPET_VERSION="~> 6.0"
       script:
         - bundle exec rake spec
 
-    - stage: spec
-      rvm: 2.1.9
-      env: STRICT_VARIABLES=yes TRUSTED_NODE_DATA=yes PUPPET_VERSION="~> 4.9.2"
+    - stage: deploy
+      rvm: 2.4.5
       script:
-        - bundle exec rake spec
+        - true
+      before_deploy:
+        - "export PUPMOD_METADATA_VERSION=`ruby -r json -e \"puts JSON.parse(File.read('metadata.json')).fetch('version')\"`"
+        - '[[ $TRAVIS_TAG =~ ^simp-${PUPMOD_METADATA_VERSION}$|^${PUPMOD_METADATA_VERSION}$ ]]'
+      deploy:
+        - provider: releases
+          api_key: $GITHUB_OAUTH_TOKEN
+          skip_cleanup: true
+          on:
+            tags: true
+            condition: '($SKIP_FORGE_PUBLISH != true)'
+        - provider: puppetforge
+          user: simp
+          password: $FORGE_PW
+          on:
+            tags: true
+            condition: '($SKIP_FORGE_PUBLISH != true)'
 
-    - stage: spec
-      rvm: 2.1.9
-      env: STRICT_VARIABLES=yes TRUSTED_NODE_DATA=yes PUPPET_VERSION="~> 4.8.2"
+    - stage: 'validate travis'
+      name: validate GitHub OAuth token in TravisCI has sufficient scope to release
       script:
-        - bundle exec rake spec
+      - 'printf "\n===== GITHUB_OAUTH_TOKEN validation
+                 \n(TRAVIS_SECURE_ENV_VARS=%b)\n\n" $TRAVIS_SECURE_ENV_VARS;
+        OWNER="$(echo $TRAVIS_REPO_SLUG | cut -d/ -f1)";
+        curl -H "Authorization: token ${GITHUB_OAUTH_TOKEN}" "https://api.github.com/users/$OWNER"
+        -I | grep ^X-OAuth-Scopes | egrep -w "repo|public_repo" '
 
-    - stage: spec
-      rvm: 2.1.9
-      env: STRICT_VARIABLES=yes TRUSTED_NODE_DATA=yes PUPPET_VERSION="~> 4.7.0"
+    - stage: 'validate travis'
+      name: 'validate that TravisCI Puppet Forge credentials can authenticate'
+      before_script:
+        - 'COOKIE_FILE="$(mktemp)"'
+        - 'HEADERS_FILE="$(mktemp)"'
       script:
-        - bundle exec rake spec
-
-    # Uncomment the following for deployment tasks and set 'secure' in both
-    # sections appropriately
-#   - stage: deploy
-#     rvm: 2.4.1
-#     script:
-#       - true
-#     before_deploy:
-#       - "export PUPMOD_METADATA_VERSION=`ruby -r json -e \"puts JSON.parse(File.read('metadata.json')).fetch('version')\"`"
-#       - '[[ $TRAVIS_TAG =~ ^simp-${PUPMOD_METADATA_VERSION}$|^${PUPMOD_METADATA_VERSION}$ ]]'
-#     deploy:
-#       - provider: releases
-#         api_key:
-#           secure: ""
-#         skip_cleanup: true
-#         on:
-#           tags: true
-#           condition: '($SKIP_FORGE_PUBLISH != true)'
-#       - provider: puppetforge
-#         user: simp
-#         password:
-#           secure: ""
-#         on:
-#           tags: true
-#           rvm: 2.4.1
-#           condition: '($SKIP_FORGE_PUBLISH != true)'
+      - 'printf "\n===== PUPPET_FORGE_PW validation " \
+                "\n(TRAVIS_SECURE_ENV_VARS=%b)\n\n" $TRAVIS_SECURE_ENV_VARS;
+         user_agent=''SimpRelengTravisCI/0.1.0-testing Purpose/forge-credential-test-for-ci-pipeline'';
+         authenticity_token="$(curl -c "$COOKIE_FILE" -L https://forge.puppet.com/login | grep ''input name="authenticity_token"'' | sed -e ''s/^.*value="//'' | cut -d\" -f1)" ;
+         curl -b "$COOKIE_FILE" -D "$HEADERS_FILE" -d
+           "user_name=simp&password=${FORGE_PW}&utf-8=%E2%9C%93&return_to_path=%2F&authenticity_token=${authenticity_token}"
+           -L https://forge.puppet.com/login 2>&1 >/dev/null;
+         grep ''^HTTP/1.1 200 OK'' "$HEADERS_FILE"'
+      after_script:
+        - 'rm -f "$COOKIE_FILE" "$HEADERS_FILE"'

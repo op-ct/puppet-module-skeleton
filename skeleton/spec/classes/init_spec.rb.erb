@@ -78,11 +78,13 @@ describe '<%= metadata.name %>' do
   context 'unsupported operating system' do
     describe '<%= metadata.name %> class without any parameters on Solaris/Nexenta' do
       let(:facts) {{
-        :osfamily        => 'Solaris',
-        :operatingsystem => 'Nexenta'
+        os: {
+          'name'   => 'Nexenta',
+          'family' => 'Solaris',
+        }
       }}
 
-      it { expect { is_expected.to contain_package('<%= metadata.name %>') }.to raise_error(Puppet::Error, /Nexenta not supported/) }
+      it { expect { is_expected.to contain_package('dummy') }.to raise_error(Puppet::Error, /OS 'Nexenta' is not supported/) }
     end
   end
 end

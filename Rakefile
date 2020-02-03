@@ -53,13 +53,21 @@ def bundle_exec_with_clean_env(cmds=[],keep_env_keys=[])
 end
 
 def generate_module( name, answers_file=nil )
-  puts "==== Using PUPPET_VERSION='#{MODULE_CMD_PUPPET_VERSION}' to run `puppet module`"
   cmd = "PUPPET_VERSION=\"#{MODULE_CMD_PUPPET_VERSION}\" " + \
     "bundle exec puppet module generate #{name} --module_skeleton_dir=#{SKELETON_DIR}"
-  if answers_file
-    cmd = "#{cmd} < #{answers_file}"
+  cmd = "#{cmd} < #{answers_file}" if answers_file
+  bundle_exec_with_clean_env([cmd]) do |cmds, env_globals|
+  if MODULE_CMD_PUPPET_VERSION != PUPPET_VERSION
+    env_globals.delete_if{|line| line =~ /^PUPPET_VERSION=/}
+    new_cmds = [
+      "== WORKAROUND: Set PUPPET_VERSION='#{MODULE_CMD_PUPPET_VERSION}' " +
+        "to run 'puppet module' instead of PUPPET_VERSION='#{PUPPET_VERSION}'",
+      'rm -f Gemfile.lock',
+      "PUPPET_VERSION=\"#{MODULE_CMD_PUPPET_VERSION}\" bundle --without development system_tests",
+    ]
+    cmds += new_cmds
   end
-  sh %Q{#{cmd}}
+  end
 end
 
 

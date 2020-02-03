@@ -14,7 +14,6 @@ EOF
 
 SKELETON_DIR    = ENV.fetch( 'SKELETON_DIR',  File.expand_path('skeleton', File.dirname(__FILE__)) )
 PUPPET_CONF_DIR = ENV.fetch( 'PUPPET_CONF_DIR',  %x{bundle exec puppet config print confdir}.chomp )
-PUPPET_CONFIG   = ENV.fetch( 'PUPPET_CONF_DIR',  %x{bundle exec puppet config print config}.chomp )
 TMP_DIR         = ENV.fetch( 'TMP_DIR', File.expand_path( 'tmp', File.dirname( __FILE__ )) )
 BUNDLER_GEMFILE = ENV.fetch( 'BUNDLER_GEMFILE', './Gemfile' )
 CLEAN << TMP_DIR
@@ -29,6 +28,27 @@ end
 def ensure_tmp
   FileUtils.mkdir_p PUPPET_CONF_DIR
   FileUtils.mkdir_p TMP_DIR
+end
+
+def bundle_exec_with_clean_env(cmds=[])
+  # propagate relavent environment variables
+  env_globals = []
+  [
+    'PUPPET_VERSION',
+    'STRICT_VARIABLES',
+    'TRAVIS',
+    'CI',
+  ].each do |v|
+    env_globals << %Q(#{v}="#{ENV[v]}") if ENV.key?( v )
+  end
+
+  yield cmds, env_globals
+
+  cmds.each do |cmd|
+    line = "#{env_globals.join(' ')} #{cmd}"
+    puts "==== EXECUTING: #{line}"
+    exit 1 unless system(line)
+  end
 end
 
 def generate_module( name, answers_file=nil )
@@ -51,13 +71,11 @@ task :generate,[:module_name] do |t,args|
   generate_module(args.module_name)
 end
 
-
 desc 'generate and test a basic module'
 task :test do
   Rake::Task['test:generate'].invoke
   Rake::Task['test:test'].execute
 end
-
 
 namespace :test do
   desc 'generate test module'
@@ -68,7 +86,6 @@ namespace :test do
     File.open( 'pupmod.answers', 'w' ){ |f| f.print ANSWERS }
     generate_module('simp-dnsmasq','pupmod.answers')
   end
-
 
   desc 'run `bundle exec rake test` inside the generated module' +
        "\n\n\tEnvironment variables:\n" +
@@ -86,19 +103,8 @@ namespace :test do
     puts "==== Entering #{mod_dir}"
     Dir.chdir mod_dir
 
-    # propagate relavent environment variables
-    env_globals = []
-    [
-      'PUPPET_VERSION',
-      'STRICT_VARIABLES',
-      'TRAVIS',
-      'CI',
-    ].each do |v|
-      env_globals << %Q(#{v}="#{ENV[v]}") if ENV.key?( v )
-    end
-
     Bundler.with_clean_env do
-      cmds = [
+      bundle_exec_with_clean_env([
         'bundle exec rake check:dot_underscore',
         'bundle exec rake check:test_file',
         'bundle exec rake pkg:check_version',
@@ -108,41 +114,32 @@ namespace :test do
         'bundle exec rake lint',
         'bundle exec rake validate',
         'bundle exec rake test',
-      ]
-      if ENV.fetch('SKELETON_beaker_suites','no') == 'yes'
-        cmds << 'bundle exec rake beaker:suites[default]'
-        _verb = 'with'
-      end
-      cmds = cmds.unshift "bundle --#{_verb||'without'} development system_tests"
-      unless ENV.fetch('SKELETON_keep_gemfile_lock','no') == 'yes'
-        cmds = cmds.unshift "rm -f Gemfile.lock"
-      end
-
-      cmds.each do |cmd|
-        line = "#{env_globals.join(' ')} #{cmd}"
-        puts "==== EXECUTING: #{line}"
-        exit 1 unless system(line)
+      ]) do |cmds, env_globals|
+        if ENV.fetch('SKELETON_beaker_suites','no') == 'yes'
+          cmds << 'bundle exec rake beaker:suites[default]'
+          _verb = 'with'
+        end
+        cmds = cmds.unshift "bundle --#{_verb||'without'} development system_tests"
+        unless ENV.fetch('SKELETON_keep_gemfile_lock','no') == 'yes'
+          cmds = cmds.unshift "rm -f Gemfile.lock"
+        end
       end
     end
 
     Bundler.with_clean_env do
-      env_globals.delete_if{|line| line =~ /^PUPPET_VERSION=/}
-      cmds = [
+      bundle_exec_with_clean_env([
         'rm -f Gemfile.lock',
         "PUPPET_VERSION=\"#{MODULE_CMD_PUPPET_VERSION}\" bundle --without development system_tests",
         "PUPPET_VERSION=\"#{MODULE_CMD_PUPPET_VERSION}\" bundle exec puppet module build",
-      ]
-      if MODULE_CMD_PUPPET_VERSION != PUPPET_VERSION
-        msg =  "== WORKAROUND: Set PUPPET_VERSION='#{MODULE_CMD_PUPPET_VERSION}'" +
-          "to run 'puppet module' instead of PUPPET_VERSION='#{PUPPET_VERSION}'"
+      ]) do |cmds, env_globals|
+        env_globals.delete_if{|line| line =~ /^PUPPET_VERSION=/}
+        if MODULE_CMD_PUPPET_VERSION != PUPPET_VERSION
+          msg =  "== WORKAROUND: Set PUPPET_VERSION='#{MODULE_CMD_PUPPET_VERSION}' " +
+            "to run 'puppet module' instead of PUPPET_VERSION='#{PUPPET_VERSION}'"
 
-        cmds.unshift %Q[echo "#{msg}"]
-        cmds.push %Q[echo "#{msg}"]
-      end
-      cmds.each do |cmd|
-        line = "#{env_globals.join(' ')} #{cmd}"
-        puts "==== EXECUTING: #{line}"
-        exit 1 unless system(line)
+          cmds.unshift %Q[echo "#{msg}"]
+          cmds.push %Q[echo "#{msg}"]
+        end
       end
     end
   end

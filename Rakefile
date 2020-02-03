@@ -30,7 +30,7 @@ def ensure_tmp
   FileUtils.mkdir_p TMP_DIR
 end
 
-def bundle_exec_with_clean_env(cmds=[])
+def bundle_exec_with_clean_env(cmds=[],keep_env_keys=[])
   # propagate relavent environment variables
   env_globals = []
   [
@@ -42,12 +42,13 @@ def bundle_exec_with_clean_env(cmds=[])
     env_globals << %Q(#{v}="#{ENV[v]}") if ENV.key?( v )
   end
 
-  yield cmds, env_globals
-
-  cmds.each do |cmd|
-    line = "#{env_globals.join(' ')} #{cmd}"
-    puts "==== EXECUTING: #{line}"
-    exit 1 unless system(line)
+  yield cmds, env_globals if block_given?
+  Bundler.with_clean_env do
+    cmds.each do |cmd|
+      line = "#{env_globals.join(' ')} #{cmd}"
+      puts "==== EXECUTING: #{line}"
+      exit 1 unless system(line)
+    end
   end
 end
 
@@ -99,12 +100,12 @@ namespace :test do
     # with the name (changed since Puppet #21272/PUP-3124):
     mod_dir = ['dnsmasq', 'simp-dnsmasq'].select{ |x| File.directory? x }.first
     puts "==== '#{Dir.pwd}' '#{mod_dir}'"
-    "#{File.expand_path(mod_dir)}"
+    ###mod_dir = "#{File.expand_path(mod_dir)}"
     puts "==== Entering #{mod_dir}"
     Dir.chdir mod_dir
 
-    Bundler.with_clean_env do
-      bundle_exec_with_clean_env([
+    cmds = [
+        'bundle',
         'bundle exec rake check:dot_underscore',
         'bundle exec rake check:test_file',
         'bundle exec rake pkg:check_version',
@@ -114,32 +115,31 @@ namespace :test do
         'bundle exec rake lint',
         'bundle exec rake validate',
         'bundle exec rake test',
-      ]) do |cmds, env_globals|
-        if ENV.fetch('SKELETON_beaker_suites','no') == 'yes'
-          cmds << 'bundle exec rake beaker:suites[default]'
-          _verb = 'with'
-        end
-        cmds = cmds.unshift "bundle --#{_verb||'without'} development system_tests"
-        unless ENV.fetch('SKELETON_keep_gemfile_lock','no') == 'yes'
-          cmds = cmds.unshift "rm -f Gemfile.lock"
-        end
-      end
+    ]
+    if ENV.fetch('SKELETON_beaker_suites','no') == 'yes'
+      cmds << 'bundle exec rake beaker:suites[default]'
+      _verb = 'with'
+    end
+    cmds = cmds.unshift "bundle --#{_verb||'without'} development system_tests"
+
+    unless ENV.fetch('SKELETON_keep_gemfile_lock','no') == 'yes'
+      cmds = cmds.unshift "rm -f Gemfile.lock"
     end
 
-    Bundler.with_clean_env do
-      bundle_exec_with_clean_env([
-        'rm -f Gemfile.lock',
-        "PUPPET_VERSION=\"#{MODULE_CMD_PUPPET_VERSION}\" bundle --without development system_tests",
-        "PUPPET_VERSION=\"#{MODULE_CMD_PUPPET_VERSION}\" bundle exec puppet module build",
-      ]) do |cmds, env_globals|
-        env_globals.delete_if{|line| line =~ /^PUPPET_VERSION=/}
-        if MODULE_CMD_PUPPET_VERSION != PUPPET_VERSION
-          msg =  "== WORKAROUND: Set PUPPET_VERSION='#{MODULE_CMD_PUPPET_VERSION}' " +
-            "to run 'puppet module' instead of PUPPET_VERSION='#{PUPPET_VERSION}'"
+    bundle_exec_with_clean_env cmds
 
-          cmds.unshift %Q[echo "#{msg}"]
-          cmds.push %Q[echo "#{msg}"]
-        end
+    bundle_exec_with_clean_env([
+      'rm -f Gemfile.lock',
+      "PUPPET_VERSION=\"#{MODULE_CMD_PUPPET_VERSION}\" bundle --without development system_tests",
+      "PUPPET_VERSION=\"#{MODULE_CMD_PUPPET_VERSION}\" bundle exec puppet module build",
+    ]) do |cmds, env_globals|
+      env_globals.delete_if{|line| line =~ /^PUPPET_VERSION=/}
+      if MODULE_CMD_PUPPET_VERSION != PUPPET_VERSION
+        msg =  "== WORKAROUND: Set PUPPET_VERSION='#{MODULE_CMD_PUPPET_VERSION}' " +
+          "to run 'puppet module' instead of PUPPET_VERSION='#{PUPPET_VERSION}'"
+
+        cmds.unshift %Q[echo "#{msg}"]
+        cmds.push %Q[echo "#{msg}"]
       end
     end
   end

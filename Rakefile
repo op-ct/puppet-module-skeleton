@@ -42,7 +42,7 @@ def bundle_exec_with_clean_env(cmds=[],keep_env_keys=[])
     env_globals << %Q(#{v}="#{ENV[v]}") if ENV.key?( v )
   end
 
-  cmds = yield cmds, env_globals if block_given?
+  yield cmds, env_globals if block_given?
   Bundler.with_clean_env do
     cmds.each do |cmd|
       line = "#{env_globals.join(' ')} #{cmd}"

@@ -1,3 +1,11 @@
+### 4.0.0 /2022-07-14
+
+- Updated asset conventions to match SIMP 6.6.0 (Puppetsync)
+- Added `.github/workflows/*.yaml`
+- Removed Travis CI pipeline
+- Removed `.ruby-version`
+- Fixed bug in spec tests
+
 ### 3.0.0 /2020-01-17
 
 - Updated asset conventions to match SIMP 6.4.0-0

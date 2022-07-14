@@ -13,6 +13,8 @@ https://github.com/simp/pupmod-simp-dnsmasq
 
 EOF
 
+
+
 SKELETON_DIR    = ENV.fetch( 'SKELETON_DIR',  File.expand_path('skeleton', File.dirname(__FILE__)) )
 PUPPET_CONF_DIR = ENV.fetch( 'PUPPET_CONF_DIR',  %x{bundle exec puppet config print confdir}.chomp )
 TMP_DIR         = ENV.fetch( 'TMP_DIR', File.expand_path( 'tmp', File.dirname( __FILE__ )) )
@@ -46,6 +48,7 @@ end
 def bundle_exec_with_clean_env(cmds=[], env_globals = [])
   # propagate relavent environment variables
   [
+    'BUNDLE_WITHOUT',
     'PUPPET_VERSION',
     'STRICT_VARIABLES',
     'TRAVIS',
@@ -56,11 +59,12 @@ def bundle_exec_with_clean_env(cmds=[], env_globals = [])
 
   yield cmds, env_globals if block_given?
 
-  Bundler.with_clean_env do
+  Bundler.with_unbundled_env do
     cmds.each do |cmd|
       line = "#{env_globals.join(' ')} #{cmd}"
       puts "==== EXECUTING: #{line}"
-      exit 1 unless system(line)
+      sh line
+      #exit 1 unless system(line)
     end
   end
 end
@@ -106,6 +110,7 @@ namespace :test do
     Dir.chdir TMP_DIR
     File.open( 'pupmod.answers', 'w' ){ |f| f.print ANSWERS }
     generate_module('simp-dnsmasq','pupmod.answers')
+    #generate_module('simp-dnsmasq','pupmod.answers')
   end
 
   desc 'run `bundle exec rake test` inside the generated module' +
@@ -139,7 +144,7 @@ namespace :test do
       test_cmds << 'bundle exec rake beaker:suites[default]'
       _verb = 'with'
     end
-    test_cmds.unshift "bundle --#{_verb||'without'} development system_tests"
+    test_cmds.unshift %Q[BUNDLE_WITHOUT="#{ENV['BUNDLE_WITHOUT'] || 'development:system_tests'}"]
 
     unless ENV.fetch('SKELETON_keep_gemfile_lock','no') == 'yes'
       test_cmds.unshift "rm -f Gemfile.lock"

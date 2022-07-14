@@ -86,7 +86,7 @@ describe '<%= metadata.name %>' do
         }
       }}
 
-      it { expect { is_expected.to contain_package('dummy') }.to raise_error(Puppet::Error, /'Nexenta' is not supported/) }
+      it { expect { is_expected.to contain_package('<%= metadata.name %>') }.to raise_error(Puppet::Error, /'Nexenta' is not supported/) }
     end
   end
 end
